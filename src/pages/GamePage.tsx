@@ -23,17 +23,17 @@ export function GamePage() {
   const guessAreaRef = useRef<HTMLDivElement>(null)
 
   // Unified ref handler to maintain consistent dimensions
-  const setGameAreaRef = (phase: GamePhase) => {
+  const setGameAreaRef = useCallback((phase: GamePhase) => {
     return (element: HTMLDivElement | null) => {
       if (phase === GamePhase.MEMORIZATION) {
-        memorizeAreaRef.current = element
-        gameAreaRef.current = element
+        ;(memorizeAreaRef as React.MutableRefObject<HTMLDivElement | null>).current = element
+        ;(gameAreaRef as React.MutableRefObject<HTMLDivElement | null>).current = element
       } else if (phase === GamePhase.TRANSITION || phase === GamePhase.GUESSING) {
-        guessAreaRef.current = element
-        gameAreaRef.current = element
+        ;(guessAreaRef as React.MutableRefObject<HTMLDivElement | null>).current = element
+        ;(gameAreaRef as React.MutableRefObject<HTMLDivElement | null>).current = element
       }
     }
-  }
+  }, [])
 
   const { playCorrect, playWrong, playVictory } = useSound(state.settings.soundEnabled)
   const { toggleFullscreen } = useFullscreen()

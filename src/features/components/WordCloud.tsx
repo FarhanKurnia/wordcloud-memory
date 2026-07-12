@@ -1,4 +1,4 @@
-import { memo, useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { memo, useRef, useEffect, useState, useCallback } from 'react'
 import { Word as WordComponent } from './Word'
 import { Word as WordType, GamePhase } from '../../types/game'
 
