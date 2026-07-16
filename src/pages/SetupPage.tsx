@@ -1,17 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { GameLayout, GameContent, GameHeader } from '../layouts'
+import { GameLayout, GameContent } from '../layouts'
 import { Card, CardBody, CardFooter, Button, Input, Textarea } from '../components'
 import { useGame } from '../features/hooks/useGame'
+import { useFullscreen } from '../hooks/useFullscreen'
 import { validateWordList, WordValidationStats } from '../utils/wordUtils'
 import { MIN_DURATION, MAX_DURATION, MIN_WORDS } from '../constants/game'
+import { GamePhase } from '../types/game'
 
 /**
  * Setup Page
  * Allows operator to configure game and import words
  */
 export function SetupPage() {
-  const { createGame } = useGame()
+  const { storePendingConfig, setPhase } = useGame()
+  const { toggleFullscreen } = useFullscreen()
   const [title, setTitle] = useState('')
   const [duration, setDuration] = useState(60)
   const [rawWords, setRawWords] = useState('')
@@ -44,38 +47,50 @@ export function SetupPage() {
 
   // Handle start game
   const handleStartGame = useCallback(() => {
+    console.log('[SetupPage] Start game clicked')
+    console.log('[SetupPage] Title:', title)
+    console.log('[SetupPage] Duration:', duration)
+    console.log('[SetupPage] Validation:', validation)
+
     if (!validation || validation.finalWordCount < MIN_WORDS) {
-      alert(`Please enter at least ${MIN_WORDS} words`)
+      alert(`Masukkan minimal ${MIN_WORDS} kata`)
       return
     }
 
     if (!title.trim()) {
-      alert('Please enter a game title')
+      alert('Masukkan judul permainan')
       return
     }
 
     if (duration < MIN_DURATION || duration > MAX_DURATION) {
-      alert(`Duration must be between ${MIN_DURATION} and ${MAX_DURATION} seconds`)
+      alert(`Durasi harus antara ${MIN_DURATION} dan ${MAX_DURATION} detik`)
       return
     }
 
-    createGame(
+    console.log('[SetupPage] All validations passed')
+    console.log('[SetupPage] Calling storePendingConfig with:', {
+      title: title.trim(),
+      duration,
+      words: validation.normalizedWords
+    })
+
+    // Store pending configuration and transition to rules page
+    storePendingConfig(
       title.trim(),
       duration,
       validation.normalizedWords
     )
-  }, [validation, title, duration, createGame])
+
+    console.log('[SetupPage] Pending config stored, now transitioning to RULES phase')
+    setPhase(GamePhase.RULES)
+    console.log('[SetupPage] Phase transition completed')
+  }, [validation, title, duration, storePendingConfig, setPhase])
 
   const canStart = validation && validation.finalWordCount >= MIN_WORDS && title.trim() && duration >= MIN_DURATION
 
   return (
-    <GameLayout>
+    <GameLayout onToggleFullscreen={toggleFullscreen}>
       <GameContent>
-        <GameHeader
-          title="Memory Word Game"
-          subtitle="Setup your game"
-        />
-
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -88,13 +103,13 @@ export function SetupPage() {
                 {/* Title Input */}
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Game Title
+                    Judul Permainan
                   </label>
                   <Input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Enter game title..."
+                    placeholder="Masukkan judul permainan..."
                     fullWidth
                   />
                 </div>
@@ -102,7 +117,7 @@ export function SetupPage() {
                 {/* Duration Input */}
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Memorization Duration (seconds)
+                    Waktu Menghafal (detik)
                   </label>
                   <Input
                     type="number"
@@ -113,7 +128,7 @@ export function SetupPage() {
                     fullWidth
                   />
                   <p className="text-sm text-neutral-500 mt-1">
-                    Recommended: 60-120 seconds
+                    Direkomendasikan: 60-120 detik
                   </p>
                 </div>
 
@@ -121,14 +136,14 @@ export function SetupPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-sm font-medium text-neutral-700">
-                      Words (one per line)
+                      Kata-kata (satu per baris)
                     </label>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      Import from File
+                      Import dari File
                     </Button>
                     <input
                       ref={fileInputRef}
@@ -141,16 +156,16 @@ export function SetupPage() {
                   <Textarea
                     value={rawWords}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRawWords(e.target.value)}
-                    placeholder={`apple\nbanana\norange\n...`}
+                    placeholder={`apel\nbanana\njeruk\n...`}
                     rows={10}
                     fullWidth
                   />
                   {validation && (
                     <div className="mt-2 text-sm text-neutral-600">
-                      <p>Unique words: {validation.finalWordCount}</p>
+                      <p>Kata unik: {validation.finalWordCount}</p>
                       {validation.duplicateCount > 0 && (
                         <p className="text-warning">
-                          Duplicates removed: {validation.duplicateCount}
+                          Duplikat dihapus: {validation.duplicateCount}
                         </p>
                       )}
                     </div>
@@ -166,7 +181,7 @@ export function SetupPage() {
                 onClick={handleStartGame}
                 disabled={!canStart}
               >
-                Start Game ({validation?.finalWordCount || 0} words)
+                Lanjut ke Aturan ({validation?.finalWordCount || 0} kata)
               </Button>
             </CardFooter>
           </Card>

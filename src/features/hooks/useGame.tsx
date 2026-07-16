@@ -17,6 +17,7 @@ import { GameStorage } from '../../storage/gameStorage'
  */
 type GameAction =
   | { type: 'CREATE_GAME'; payload: { title: string; duration: number; words: string[] } }
+  | { type: 'STORE_PENDING_CONFIG'; payload: { title: string; duration: number; words: string[] } }
   | { type: 'START_GAME' }
   | { type: 'GENERATE_LAYOUT'; payload: { viewportWidth: number; viewportHeight: number } }
   | { type: 'TRANSITION_TO_GUESS' }
@@ -57,8 +58,9 @@ const createInitialGameState = (): GameState => ({
  * Game State Transitions (Finite State Machine)
  */
 const validTransitions: Record<GamePhase, GamePhase[]> = {
-  [GamePhase.IDLE]: [GamePhase.SETUP],
-  [GamePhase.SETUP]: [GamePhase.GENERATING_LAYOUT, GamePhase.IDLE],
+  [GamePhase.IDLE]: [GamePhase.SETUP, GamePhase.RULES],
+  [GamePhase.SETUP]: [GamePhase.RULES, GamePhase.IDLE],
+  [GamePhase.RULES]: [GamePhase.GENERATING_LAYOUT, GamePhase.SETUP],
   [GamePhase.GENERATING_LAYOUT]: [GamePhase.MEMORIZATION, GamePhase.SETUP],
   [GamePhase.MEMORIZATION]: [GamePhase.TRANSITION, GamePhase.GUESSING], // Allow direct to GUESSING
   [GamePhase.TRANSITION]: [GamePhase.GUESSING],
@@ -99,18 +101,54 @@ function calculateStatistics(words: Word[], totalGuesses: number, incorrectGuess
  */
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
+    case 'STORE_PENDING_CONFIG': {
+      const { title, duration, words } = action.payload
+      console.log('[useGame] STORE_PENDING_CONFIG action received')
+      console.log('[useGame] Payload:', { title, duration, wordCount: words.length })
+
+      const newState = {
+        ...state,
+        pendingConfig: { title, duration, words },
+        title,
+        duration,
+        words: words.map((word, index) => ({
+          id: `word-${index}`,
+          original: word,
+          normalized: word.toLowerCase().trim(),
+          found: false,
+          position: { x: 0, y: 0 },
+          fontSize: 24,
+          rotation: 0,
+          color: '#3B82F6',
+        })),
+      }
+
+      console.log('[useGame] New state after STORE_PENDING_CONFIG:')
+      console.log('[useGame] - Phase:', newState.phase)
+      console.log('[useGame] - Has pendingConfig:', !!newState.pendingConfig)
+      console.log('[useGame] - Words count:', newState.words.length)
+
+      return newState
+    }
+
     case 'CREATE_GAME': {
       const { title, duration, words } = action.payload
       const normalizedWords = normalizeWordList(words)
 
-      // Allow creating game from IDLE, SETUP, or COMPLETED phases
+      console.log('[useGame] CREATE_GAME action received')
+      console.log('[useGame] Current phase:', state.phase)
+      console.log('[useGame] Title:', title, 'Duration:', duration, 'Words:', words.length)
+
+      // Allow creating game from IDLE, SETUP, RULES, or COMPLETED phases
       if (state.phase !== GamePhase.IDLE &&
           state.phase !== GamePhase.SETUP &&
+          state.phase !== GamePhase.RULES &&
           state.phase !== GamePhase.COMPLETED) {
+        console.log('[useGame] Invalid phase for CREATE_GAME, returning current state')
         return state
       }
 
-      return {
+      const newState = {
         ...state,
         id: `game-${Date.now()}`,
         title,
@@ -137,6 +175,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           elapsedTime: 0,
         },
       }
+
+      console.log('[useGame] New state phase:', newState.phase)
+      console.log('[useGame] New state word count:', newState.words.length)
+
+      return newState
     }
 
     case 'START_GAME': {
@@ -265,12 +308,21 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'SET_PHASE': {
       const newPhase = action.payload
+      console.log('[useGame] SET_PHASE action received')
+      console.log('[useGame] Current phase:', state.phase)
+      console.log('[useGame] Target phase:', newPhase)
+      console.log('[useGame] Can transition:', canTransition(state.phase, newPhase))
+
       if (canTransition(state.phase, newPhase)) {
-        return {
+        const newState = {
           ...state,
           phase: newPhase,
         }
+        console.log('[useGame] Phase transition successful, new phase:', newState.phase)
+        return newState
       }
+
+      console.log('[useGame] Phase transition failed, returning current state')
       return state
     }
 
@@ -285,6 +337,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 interface GameContextValue {
   state: GameState
   createGame: (title: string, duration: number, words: string[]) => void
+  storePendingConfig: (title: string, duration: number, words: string[]) => void
   startGame: () => void
   generateLayout: (width: number, height: number) => void
   transitionToGuess: () => void
@@ -328,6 +381,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
    */
   const createGame = useCallback((title: string, duration: number, words: string[]) => {
     dispatch({ type: 'CREATE_GAME', payload: { title, duration, words } })
+  }, [])
+
+  /**
+   * Store pending game configuration
+   */
+  const storePendingConfig = useCallback((title: string, duration: number, words: string[]) => {
+    dispatch({ type: 'STORE_PENDING_CONFIG', payload: { title, duration, words } })
   }, [])
 
   /**
@@ -422,6 +482,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const value: GameContextValue = {
     state,
     createGame,
+    storePendingConfig,
     startGame,
     generateLayout,
     transitionToGuess,

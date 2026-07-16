@@ -49,7 +49,7 @@ export class WordCloudLayoutEngine {
     // Assign font sizes based on word count
     const fontSizes = this.calculateResponsiveFontSizes()
 
-    // Process words in random order
+    // Process words in random order for better distribution
     const shuffledWords = [...normalizedWords].sort(() => Math.random() - 0.5)
 
     for (let i = 0; i < shuffledWords.length; i++) {
@@ -72,12 +72,12 @@ export class WordCloudLayoutEngine {
 
       console.log(`[WordCloudLayout] Processing word "${word}":`, {fontSize, rotation, width, height})
 
-      // Find position using spiral algorithm
+      // Find position using improved spiral algorithm
       const position = this.findPosition(
         width,
         height,
         occupiedRectangles,
-        words.length
+        i
       )
 
       if (position) {
@@ -95,41 +95,47 @@ export class WordCloudLayoutEngine {
         console.log(`[WordCloudLayout] Placed "${word}" at:`, position)
         words.push(wordObject)
         occupiedRectangles.push({
-          x: position.x,
-          y: position.y,
-          width,
-          height,
+          x: position.x - LAYOUT_SETTINGS.WORD_PADDING,
+          y: position.y - LAYOUT_SETTINGS.WORD_PADDING,
+          width: width + LAYOUT_SETTINGS.WORD_PADDING * 2,
+          height: height + LAYOUT_SETTINGS.WORD_PADDING * 2,
         })
       } else {
         console.log(`[WordCloudLayout] Failed to place "${word}" - no position found`)
       }
     }
 
-    console.log('[WordCloudLayout] Layout complete. Total words placed:', words.length)
+    console.log('[WordCloudLayout] Layout complete. Total words placed:', words.length, 'of', normalizedWords.length)
 
     // Optimize layout to fill viewport
     return this.optimizeViewportUsage(words)
   }
 
   /**
-   * Calculate responsive font sizes based on word count
+   * Calculate responsive font sizes based on word count - EXTREMELY LARGE for desktop
    */
   private calculateResponsiveFontSizes(): Record<FontSize, number> {
     const baseSizes: Record<FontSize, number> = {
-      'extra-large': 56,
-      'large': 42,
-      'medium': 32,
-      'small': 24,
-      'tiny': 18,
+      'extra-large': 120, // Extremely large for desktop readability
+      'large': 95,
+      'medium': 75,
+      'small': 60,
+      'tiny': 48,
     }
 
-    // Scale down for many words
+    // Very conservative scaling to maintain maximum readability
     let scaleFactor = 1
-    if (this.wordCount > 100) {
-      scaleFactor = 0.8
+    if (this.wordCount > 150) {
+      scaleFactor = 0.75 // Much less aggressive scaling
+    } else if (this.wordCount > 100) {
+      scaleFactor = 0.82 // Much less aggressive scaling
+    } else if (this.wordCount > 75) {
+      scaleFactor = 0.88
     } else if (this.wordCount > 50) {
-      scaleFactor = 0.9
+      scaleFactor = 0.95
     }
+
+    console.log('[WordCloudLayout] Font scale factor:', scaleFactor, 'for', this.wordCount, 'words')
 
     return Object.entries(baseSizes).reduce((acc, [size, value]) => ({
       ...acc,
@@ -188,41 +194,77 @@ export class WordCloudLayoutEngine {
   }
 
   /**
-   * Find position using spiral placement algorithm
+   * Find position using extremely aggressive algorithm for maximum desktop viewport utilization
    */
   private findPosition(
     width: number,
     height: number,
     occupied: Array<{x: number, y: number, width: number, height: number}>,
-    _wordIndex: number
+    wordIndex: number
   ): {x: number, y: number} | null {
     const centerX = this.viewportWidth / 2
     const centerY = this.viewportHeight / 2
 
-    // Spiral parameters
-    const angleIncrement = 0.5
-    const radiusIncrement = LAYOUT_SETTINGS.SPIRAL_SPACING
+    // Extremely aggressive spiral parameters
+    const angleIncrement = 0.5 // Maximum angular distribution
+    const radiusIncrement = LAYOUT_SETTINGS.SPIRAL_SPACING * 2.2 // Extremely aggressive expansion
     let angle = 0
     let radius = 0
 
-    for (let attempt = 0; attempt < LAYOUT_SETTINGS.MAX_COLLISION_ATTEMPTS; attempt++) {
-      // Calculate position using spiral
-      const x = centerX + radius * Math.cos(angle) - width / 2
-      const y = centerY + radius * Math.sin(angle) - height / 2
+    // Start at extremely different angles for maximum distribution
+    angle = (wordIndex * 2.5) % (Math.PI * 2) // Maximum angle variety
 
-      // Check bounds with padding
-      const padding = LAYOUT_SETTINGS.WORD_PADDING
-      if (
-        x < padding ||
-        y < padding ||
-        x + width + padding > this.viewportWidth ||
-        y + height + padding > this.viewportHeight
-      ) {
-        // Continue spiral
-        angle += angleIncrement
-        radius += radiusIncrement * 0.1
-        continue
+    // Calculate boundaries with absolute minimal padding
+    const padding = LAYOUT_SETTINGS.WORD_PADDING
+    const maxValidX = this.viewportWidth - width - padding
+    const maxValidY = this.viewportHeight - height - padding
+    const minValidX = padding
+    const minValidY = padding
+
+    // Try aggressive edge-first placement for maximum utilization
+    const edgeAttempts = Math.min(150, Math.floor(this.wordCount * 0.2))
+    if (wordIndex < edgeAttempts) {
+      // Aggressive edge placement strategy
+      const edgeStrategies = [
+        // Horizontal edges (top/bottom)
+        () => ({ x: minValidX + Math.random() * (maxValidX - minValidX), y: minValidY }),
+        () => ({ x: minValidX + Math.random() * (maxValidX - minValidX), y: maxValidY }),
+        // Vertical edges (left/right)
+        () => ({ x: minValidX, y: minValidY + Math.random() * (maxValidY - minValidY) }),
+        () => ({ x: maxValidX, y: minValidY + Math.random() * (maxValidY - minValidY) }),
+        // Corner regions for maximum spread
+        () => ({ x: minValidX + Math.random() * (maxValidX - minValidX) * 0.3, y: minValidY + Math.random() * (maxValidY - minValidY) * 0.3 }),
+        () => ({ x: maxValidX - Math.random() * (maxValidX - minValidX) * 0.3, y: minValidY + Math.random() * (maxValidY - minValidY) * 0.3 }),
+        () => ({ x: minValidX + Math.random() * (maxValidX - minValidX) * 0.3, y: maxValidY - Math.random() * (maxValidY - minValidY) * 0.3 }),
+        () => ({ x: maxValidX - Math.random() * (maxValidX - minValidX) * 0.3, y: maxValidY - Math.random() * (maxValidY - minValidY) * 0.3 }),
+      ]
+
+      for (const strategy of edgeStrategies) {
+        const pos = strategy()
+        const newRect = {
+          x: pos.x - padding,
+          y: pos.y - padding,
+          width: width + padding * 2,
+          height: height + padding * 2,
+        }
+        if (!this.checkCollision(newRect, occupied)) {
+          return pos
+        }
       }
+    }
+
+    for (let attempt = 0; attempt < LAYOUT_SETTINGS.MAX_COLLISION_ATTEMPTS; attempt++) {
+      // Calculate position using extremely aggressive spiral
+      const rawX = centerX + radius * Math.cos(angle) - width / 2
+      const rawY = centerY + radius * Math.sin(angle) - height / 2
+
+      // Extremely permissive bounds checking
+      const x = Math.max(minValidX, Math.min(maxValidX, rawX))
+      const y = Math.max(minValidY, Math.min(maxValidY, rawY))
+
+      // Extremely aggressive expansion regardless of position
+      radius += radiusIncrement * 0.25
+      angle += angleIncrement * 1.5
 
       // Check collision with existing words
       const newRect = {
@@ -235,18 +277,47 @@ export class WordCloudLayoutEngine {
       if (!this.checkCollision(newRect, occupied)) {
         return { x, y }
       }
-
-      // Continue spiral
-      angle += angleIncrement
-      radius += radiusIncrement * 0.1
     }
 
-    // If no position found, return null (shouldn't happen with reasonable word counts)
-    return null
+    // Last resort: aggressive random placement across entire viewport
+    return this.findRandomPosition(width, height, occupied, minValidX, maxValidX, minValidY, maxValidY, padding)
   }
 
   /**
-   * Check if two rectangles overlap
+   * Last resort: try random placement for remaining words
+   */
+  private findRandomPosition(
+    width: number,
+    height: number,
+    occupied: Array<{x: number, y: number, width: number, height: number}>,
+    minValidX: number,
+    maxValidX: number,
+    minValidY: number,
+    maxValidY: number,
+    padding: number
+  ): {x: number, y: number} | null {
+    // Try random positions for a limited number of attempts
+    for (let attempt = 0; attempt < 500; attempt++) {
+      const x = minValidX + Math.random() * (maxValidX - minValidX)
+      const y = minValidY + Math.random() * (maxValidY - minValidY)
+
+      const newRect = {
+        x: x - padding,
+        y: y - padding,
+        width: width + padding * 2,
+        height: height + padding * 2,
+      }
+
+      if (!this.checkCollision(newRect, occupied)) {
+        return { x, y }
+      }
+    }
+
+    return null // Final fallback
+  }
+
+  /**
+   * Check if two rectangles overlap (simplified for efficiency)
    */
   private checkCollision(
     rect: {x: number, y: number, width: number, height: number},
@@ -266,7 +337,7 @@ export class WordCloudLayoutEngine {
   }
 
   /**
-   * Optimize layout to fill approximately 85% of viewport
+   * Optimize layout to fill viewport with balanced scaling
    */
   private optimizeViewportUsage(words: Word[]): Word[] {
     if (words.length === 0) return words
@@ -291,30 +362,51 @@ export class WordCloudLayoutEngine {
     const contentHeight = maxY - minY
     const currentCoverage = (contentWidth * contentHeight) / (this.viewportWidth * this.viewportHeight)
 
-    // If content already fills 85% or more, no scaling needed
-    if (currentCoverage >= LAYOUT_SETTINGS.TARGET_VIEWPORT_COVERAGE) {
-      return words
-    }
+    console.log('[WordCloudLayout] Content bounds:', {minX, minY, maxX, maxY})
+    console.log('[WordCloudLayout] Content size:', contentWidth, 'x', contentHeight)
+    console.log('[WordCloudLayout] Current coverage:', currentCoverage.toFixed(3))
+    console.log('[WordCloudLayout] Words placed:', words.length, 'of', this.wordCount)
 
-    // Calculate scale to achieve target coverage
-    const targetScale = Math.sqrt(
-      (LAYOUT_SETTINGS.TARGET_VIEWPORT_COVERAGE * this.viewportWidth * this.viewportHeight) /
-      (contentWidth * contentHeight)
-    )
-
-    // Calculate center offset
-    const centerX = (minX + maxX) / 2
-    const centerY = (minY + maxY) / 2
-
+    // Calculate content and viewport centers
+    const contentCenterX = (minX + maxX) / 2
+    const contentCenterY = (minY + maxY) / 2
     const viewportCenterX = this.viewportWidth / 2
     const viewportCenterY = this.viewportHeight / 2
+
+    // If content already fills target coverage or more, just center it
+    if (currentCoverage >= LAYOUT_SETTINGS.TARGET_VIEWPORT_COVERAGE) {
+      console.log('[WordCloudLayout] Coverage sufficient, only centering')
+      // Only center without scaling
+      const offsetX = viewportCenterX - contentCenterX
+      const offsetY = viewportCenterY - contentCenterY
+
+      return words.map(word => ({
+        ...word,
+        position: {
+          x: word.position.x + offsetX,
+          y: word.position.y + offsetY,
+        },
+      }))
+    }
+
+    // Calculate scale to achieve target coverage (extremely aggressive scaling)
+    const maxScale = 1.7 // Allow extremely aggressive scaling for maximum viewport utilization
+    const targetScale = Math.min(
+      maxScale,
+      Math.sqrt(
+        (LAYOUT_SETTINGS.TARGET_VIEWPORT_COVERAGE * this.viewportWidth * this.viewportHeight) /
+        (contentWidth * contentHeight)
+      )
+    )
+
+    console.log('[WordCloudLayout] Applying scale:', targetScale.toFixed(2))
 
     // Scale and translate all words
     return words.map(word => ({
       ...word,
       position: {
-        x: viewportCenterX + (word.position.x - centerX) * targetScale,
-        y: viewportCenterY + (word.position.y - centerY) * targetScale,
+        x: viewportCenterX + (word.position.x - contentCenterX) * targetScale,
+        y: viewportCenterY + (word.position.y - contentCenterY) * targetScale,
       },
     }))
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import confetti from 'canvas-confetti'
-import { GameLayout, GameContent, GameHeader } from '../layouts'
+import { GameLayout, GameContent } from '../layouts'
 import { WordCloud, Countdown, GuessInput } from '../features/components'
 import { ProgressBar, Badge, Button } from '../components'
 import { useGame } from '../features/hooks/useGame'
@@ -21,6 +21,7 @@ export function GamePage() {
   const gameAreaRef = useRef<HTMLDivElement>(null)
   const memorizeAreaRef = useRef<HTMLDivElement>(null)
   const guessAreaRef = useRef<HTMLDivElement>(null)
+  const { toggleFullscreen } = useFullscreen()
 
   // Unified ref handler to maintain consistent dimensions
   const setGameAreaRef = useCallback((phase: GamePhase) => {
@@ -36,7 +37,6 @@ export function GamePage() {
   }, [])
 
   const { playCorrect, playWrong, playVictory } = useSound(state.settings.soundEnabled)
-  const { toggleFullscreen } = useFullscreen()
 
   // Setup countdown - ultra simple approach
   const countdownDuration = state.duration || DEFAULT_DURATION
@@ -85,19 +85,24 @@ export function GamePage() {
 
   // Generate layout when entering GENERATING_LAYOUT phase
   useEffect(() => {
+    console.log('[GamePage] Phase changed to:', state.phase)
     if (state.phase === GamePhase.GENERATING_LAYOUT) {
+      console.log('[GamePage] Starting layout generation...')
       // Small delay to ensure DOM is ready
       const timer = setTimeout(() => {
         if (gameAreaRef.current) {
           const { width, height } = gameAreaRef.current.getBoundingClientRect()
           console.log('[GamePage] Generating layout with ref dimensions:', width, 'x', height)
-          generateLayout(width, height)
+          // Use extremely aggressive padding for maximum viewport utilization
+          const paddedWidth = width * 0.99 // Almost full width
+          const paddedHeight = height * 0.99 // Almost full height
+          generateLayout(paddedWidth, paddedHeight)
         } else {
-          // Fallback to window size if ref not available
-          const fallbackWidth = window.innerWidth * 0.8
-          const fallbackHeight = window.innerHeight * 0.6
-          console.log('[GamePage] Using fallback dimensions:', fallbackWidth, 'x', fallbackHeight)
-          generateLayout(fallbackWidth, fallbackHeight)
+          // Use extremely aggressive viewport size for maximum desktop display
+          const viewportWidth = window.innerWidth * 0.96 // Almost full screen width
+          const viewportHeight = window.innerHeight * 0.92 // Almost full screen height
+          console.log('[GamePage] Using viewport dimensions:', viewportWidth, 'x', viewportHeight)
+          generateLayout(viewportWidth, viewportHeight)
         }
       }, 100)
 
@@ -180,164 +185,152 @@ export function GamePage() {
 
   return (
     <GameLayout onToggleFullscreen={toggleFullscreen}>
-      <GameContent>
-        {/* Loading/Generating Layout Phase */}
-        {state.phase === GamePhase.GENERATING_LAYOUT && (
-          <div className="w-full text-center">
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-6"></div>
-              <h2 className="text-2xl font-bold text-neutral-900 mb-2">
-                Generating Word Cloud...
-              </h2>
-              <p className="text-neutral-600">
-                Preparing your game
-              </p>
+      {state.phase === GamePhase.GENERATING_LAYOUT && (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-6"></div>
+            <h2 className="text-2xl font-bold text-neutral-900 mb-2">
+              Menyiapkan Kata-Kata...
+            </h2>
+            <p className="text-neutral-600">
+              Memproses permainan Anda
+            </p>
+          </div>
+        </div>
+      )}
+
+      {state.phase === GamePhase.MEMORIZATION && (
+        <div className="w-full h-screen flex flex-col p-4">
+            <div className="mb-2">
+              <Countdown remainingSeconds={remainingSeconds} />
+            </div>
+
+            <div
+              ref={setGameAreaRef(state.phase)}
+              className="relative w-full flex-1 bg-white rounded-2xl shadow-lg overflow-hidden"
+              style={{ maxHeight: 'calc(100vh - 120px)' }}
+            >
+              <WordCloud words={state.words} gamePhase={state.phase} />
+            </div>
+
+            <div className="mt-2 text-center">
+              <Badge variant="info" size="lg">
+                {state.words.length} kata untuk diingat
+              </Badge>
             </div>
           </div>
-        )}
+      )}
 
-        {/* Memorization Phase */}
-        {state.phase === GamePhase.MEMORIZATION && (
-          <div className="w-full">
-              <GameHeader
-                title={state.title}
-                subtitle="Memorize these words!"
+      {(state.phase === GamePhase.TRANSITION || state.phase === GamePhase.GUESSING) && (
+        <div className="w-full h-screen flex flex-col p-4">
+          {/* Reset Button */}
+          <div className="flex justify-center mb-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={handleReset}
+            >
+              Reset Game
+            </Button>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mb-2">
+            <ProgressBar
+              value={state.statistics.foundWords}
+              max={state.statistics.totalWords}
+              color="success"
+              showLabel
+            />
+          </div>
+
+          {/* Statistics */}
+          <div className="flex justify-center gap-4 mb-2">
+            <Badge variant="success" size="md">
+              Ditemukan: {state.statistics.foundWords}
+            </Badge>
+            <Badge variant="default" size="md">
+              Sisa: {state.statistics.remainingWords}
+            </Badge>
+          </div>
+
+          {/* Word Cloud */}
+          <div
+            ref={setGameAreaRef(state.phase)}
+            className="relative w-full flex-1 bg-white rounded-2xl shadow-lg overflow-hidden mb-2"
+            style={{ maxHeight: 'calc(100vh - 180px)' }}
+          >
+            <WordCloud words={state.words} gamePhase={state.phase} />
+          </div>
+
+          {/* Guess Input */}
+          <div className="max-w-2xl mx-auto">
+            <motion.div
+              animate={shakeAnimation ? {
+                x: [0, -10, 10, -10, 10, -10, 10, -10, 10, 0],
+                transition: { duration: 0.5 }
+              } : {}}
+              className="w-full"
+            >
+              <GuessInput
+                value={guess}
+                onChange={setGuess}
+                onSubmit={handleSubmitGuess}
+                placeholder="Ketik sebuah kata dan tekan Enter..."
+                disabled={state.phase !== GamePhase.GUESSING}
               />
+            </motion.div>
+          </div>
+        </div>
+      )}
 
-              <div className="mb-4">
-                <Countdown remainingSeconds={remainingSeconds} />
+      {state.phase === GamePhase.COMPLETED && (
+        <GameContent>
+          <div className="w-full text-center">
+            <div className="mb-8">
+              <h1 className="text-6xl font-bold text-success mb-4">
+                Selamat!
+              </h1>
+              <p className="text-2xl text-neutral-600">
+                Anda menemukan semua {state.statistics.totalWords} kata!
+              </p>
+            </div>
+
+            {/* Statistics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="bg-white p-6 rounded-xl shadow">
+                <div className="text-3xl font-bold text-primary">
+                  {state.statistics.totalWords}
+                </div>
+                <div className="text-sm text-neutral-600">Total Kata</div>
               </div>
-
-              <div
-                ref={setGameAreaRef(state.phase)}
-                className="relative w-full flex-1 min-h-[50vh] bg-white rounded-2xl shadow-lg overflow-hidden"
-              >
-                <WordCloud words={state.words} gamePhase={state.phase} />
+              <div className="bg-white p-6 rounded-xl shadow">
+                <div className="text-3xl font-bold text-success">
+                  {state.statistics.foundWords}
+                </div>
+                <div className="text-sm text-neutral-600">Ditemukan</div>
               </div>
-
-              <div className="mt-6 text-center">
-                <Badge variant="info" size="lg">
-                  {state.words.length} words to memorize
-                </Badge>
+              <div className="bg-white p-6 rounded-xl shadow">
+                <div className="text-3xl font-bold text-warning">
+                  {state.statistics.incorrectGuesses}
+                </div>
+                <div className="text-sm text-neutral-600">Salah</div>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow">
+                <div className="text-3xl font-bold text-neutral-600">
+                  {Math.floor((state.duration - remainingSeconds) / 60)}:
+                  {String((state.duration - remainingSeconds) % 60).padStart(2, '0')}
+                </div>
+                <div className="text-sm text-neutral-600">Waktu</div>
               </div>
             </div>
-          )}
 
-          {/* Guessing Phase */}
-          {(state.phase === GamePhase.TRANSITION || state.phase === GamePhase.GUESSING) && (
-            <div className="w-full">
-              <GameHeader
-                title={state.title}
-                subtitle="Call out the words you remember!"
-              />
-
-              {/* Reset Button */}
-              <div className="flex justify-center mb-4">
-                <Button
-                  variant="outline"
-                  size="md"
-                  onClick={handleReset}
-                >
-                  Reset Game
-                </Button>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="mb-6">
-                <ProgressBar
-                  value={state.statistics.foundWords}
-                  max={state.statistics.totalWords}
-                  color="success"
-                  showLabel
-                />
-              </div>
-
-              {/* Statistics */}
-              <div className="flex justify-center gap-4 mb-6">
-                <Badge variant="success" size="md">
-                  Found: {state.statistics.foundWords}
-                </Badge>
-                <Badge variant="default" size="md">
-                  Remaining: {state.statistics.remainingWords}
-                </Badge>
-              </div>
-
-              {/* Word Cloud */}
-              <div
-                ref={setGameAreaRef(state.phase)}
-                className="relative w-full flex-1 min-h-[50vh] bg-white rounded-2xl shadow-lg overflow-hidden mb-6"
-              >
-                <WordCloud words={state.words} gamePhase={state.phase} />
-              </div>
-
-              {/* Guess Input */}
-              <div className="max-w-2xl mx-auto">
-                <motion.div
-                  animate={shakeAnimation ? {
-                    x: [0, -10, 10, -10, 10, -10, 10, -10, 10, 0],
-                    transition: { duration: 0.5 }
-                  } : {}}
-                  className="w-full"
-                >
-                  <GuessInput
-                    value={guess}
-                    onChange={setGuess}
-                    onSubmit={handleSubmitGuess}
-                    placeholder="Type a word and press Enter..."
-                    disabled={state.phase !== GamePhase.GUESSING}
-                  />
-                </motion.div>
-              </div>
-            </div>
-          )}
-
-          {/* Victory Phase */}
-          {state.phase === GamePhase.COMPLETED && (
-            <div className="w-full text-center">
-              <div className="mb-8">
-                <h1 className="text-6xl font-bold text-success mb-4">
-                  Congratulations!
-                </h1>
-                <p className="text-2xl text-neutral-600">
-                  You found all {state.statistics.totalWords} words!
-                </p>
-              </div>
-
-              {/* Statistics */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white p-6 rounded-xl shadow">
-                  <div className="text-3xl font-bold text-primary">
-                    {state.statistics.totalWords}
-                  </div>
-                  <div className="text-sm text-neutral-600">Total Words</div>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow">
-                  <div className="text-3xl font-bold text-success">
-                    {state.statistics.foundWords}
-                  </div>
-                  <div className="text-sm text-neutral-600">Found</div>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow">
-                  <div className="text-3xl font-bold text-warning">
-                    {state.statistics.incorrectGuesses}
-                  </div>
-                  <div className="text-sm text-neutral-600">Incorrect</div>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow">
-                  <div className="text-3xl font-bold text-neutral-600">
-                    {Math.floor((state.duration - remainingSeconds) / 60)}:
-                    {String((state.duration - remainingSeconds) % 60).padStart(2, '0')}
-                  </div>
-                  <div className="text-sm text-neutral-600">Time</div>
-                </div>
-              </div>
-
-              <Button size="lg" onClick={handleReset}>
-                New Game
-              </Button>
-            </div>
-          )}
-      </GameContent>
+            <Button size="lg" onClick={handleReset}>
+              Game Baru
+            </Button>
+          </div>
+        </GameContent>
+      )}
     </GameLayout>
   )
 }

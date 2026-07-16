@@ -5,6 +5,7 @@
 export enum GamePhase {
   IDLE = 'IDLE',
   SETUP = 'SETUP',
+  RULES = 'RULES',
   GENERATING_LAYOUT = 'GENERATING_LAYOUT',
   MEMORIZATION = 'MEMORIZATION',
   TRANSITION = 'TRANSITION',
@@ -66,6 +67,11 @@ export interface GameState {
   words: Word[]
   statistics: GameStatistics
   settings: GameSettings
+  pendingConfig?: {
+    title: string
+    duration: number
+    words: string[]
+  }
 }
 
 /**

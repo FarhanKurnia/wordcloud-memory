@@ -10,19 +10,15 @@ export const MIN_WORDS = 10
 export const MAX_WORDS = 1000
 
 /**
- * Font size distribution as per PRD
- * 5% Extra Large
- * 15% Large
- * 30% Medium
- * 35% Small
- * 15% Tiny
+ * Font size distribution for maximum desktop readability
+ * Extremely weighted toward larger, readable sizes
  */
 export const FONT_SIZE_DISTRIBUTION = {
-  'extra-large': 0.05,
-  'large': 0.15,
-  'medium': 0.30,
-  'small': 0.35,
-  'tiny': 0.15,
+  'extra-large': 0.20, // Many extra-large for maximum impact and readability
+  'large': 0.40,       // Most words large (primary readable size)
+  'medium': 0.30,      // Medium words (still very readable)
+  'small': 0.09,       // Very few small words
+  'tiny': 0.01,        // Almost no tiny words (hard to read)
 } as const
 
 /**
@@ -67,10 +63,10 @@ export const WORD_COLORS = [
  * Word cloud layout settings
  */
 export const LAYOUT_SETTINGS = {
-  TARGET_VIEWPORT_COVERAGE: 0.85, // 85% of viewport
-  SPIRAL_SPACING: 20,
-  MAX_COLLISION_ATTEMPTS: 500,
-  WORD_PADDING: 8,
+  TARGET_VIEWPORT_COVERAGE: 0.98, // 98% - extremely aggressive to fill viewport
+  SPIRAL_SPACING: 35, // Very large spacing for maximum distribution
+  MAX_COLLISION_ATTEMPTS: 5000, // Maximum attempts for all words
+  WORD_PADDING: 4, // Minimal padding for maximum space utilization
 } as const
 
 /**
